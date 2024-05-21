@@ -17,6 +17,13 @@ def BlobTriggerPDF(myblob: func.InputStream):
     logging.info(f"LOG: Triggered! Init")
     
     # Initialize global variables
+    connection_string = os.getenv("AzureWebJobsStorage")
+    # Connect to Blob Storage
+    blob_service_client = BlobServiceClient.from_connection_string(connection_string)
+    blob_client = blob_service_client.get_blob_client(container="requirements", blob=myblob.name)
+    blob_properties = blob_client.get_blob_properties()
+
+
     doc_intelligence_api_key = os.getenv("DocIntelligenceApiKey")
     doc_intelligence_endpoint = os.getenv("DocIntelligenceEndpoint")
 
@@ -28,7 +35,7 @@ def BlobTriggerPDF(myblob: func.InputStream):
     ###### PROCESS PDF ON TRIGGER #############
     logging.info(f"LOG: BLOB Trigger: Processed blob\n"
                 f"Name: {myblob.name}\n"
-                f"Blob Size: {myblob.length} bytes")
+                f"Blob Size: {blob_properties.size} bytes")
 
     # Only process PDF files
     if not myblob.name.endswith('.pdf'):
