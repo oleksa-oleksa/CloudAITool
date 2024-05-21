@@ -15,15 +15,9 @@ app = func.FunctionApp()
 def BlobTriggerPDF(myblob: func.InputStream):
 
     logging.info(f"LOG: Triggered! Init")
-    
-    # Initialize global variables
-    connection_string = os.getenv("AzureWebJobsStorage")
-    # Connect to Blob Storage
-    blob_service_client = BlobServiceClient.from_connection_string(connection_string)
-    blob_client = blob_service_client.get_blob_client(container="requirements", blob=myblob.name)
-    blob_properties = blob_client.get_blob_properties()
+    logging.info(myblob.name)
 
-
+    # Initialize global variables    
     doc_intelligence_api_key = os.getenv("DocIntelligenceApiKey")
     doc_intelligence_endpoint = os.getenv("DocIntelligenceEndpoint")
 
@@ -31,40 +25,41 @@ def BlobTriggerPDF(myblob: func.InputStream):
     openai.api_key = os.getenv("OpenAIApiKey")
     openai.base_url = os.getenv("OpenAIEndpoint")
 
-    
-    ###### PROCESS PDF ON TRIGGER #############
-    logging.info(f"LOG: BLOB Trigger: Processed blob\n"
-                f"Name: {myblob.name}\n"
-                f"Blob Size: {blob_properties.size} bytes")
+    logging.info(f"LOG: Got environment variables")
 
+    ###### PROCESS PDF ON TRIGGER #############
+
+    logging.info(f"Python blob trigger function processed blob\n"
+                f"Name: {myblob.name}\n"
+                f"Blob Size: {myblob.length} bytes")
+    
     # Only process PDF files
     if not myblob.name.endswith('.pdf'):
         logging.info("Not a PDF file, skipping processing.")
         return
 
     # Load PDF from blob
+    logging.info(f"LOG: Start myblob.read()")
     pdf_bytes = myblob.read()
+    logging.info(f"LOG: Finish myblob.read()")
 
     ###### PROCESS PDF AND CREATE CHUNKS #######
     doc_intelligence_api_key = os.getenv("DocIntelligenceApiKey")
     doc_intelligence_endpoint = os.getenv("DocIntelligenceEndpoint")
 
-    doc_analysis_client = DocumentAnalysisClient(
-        endpoint=doc_intelligence_endpoint,
-        credential=AzureKeyCredential(doc_intelligence_api_key)
-    )
+    doc_analysis_client = DocumentAnalysisClient(endpoint=doc_intelligence_endpoint, credential=AzureKeyCredential(doc_intelligence_api_key))
     logging.info("LOG: Document Intelligence init done")
 
     # Analyze document layout
-    poller = doc_analysis_client.begin_analyze_document(
-        model="prebuilt-layout", document=pdf_bytes)
+    # Analyze document layout
+    poller = doc_analysis_client.begin_analyze_document(model_id="prebuilt-layout", document=pdf_bytes)
     layout_result = poller.result()
 
     # Process layout result (semantic chunking)
     semantic_chunks = []
     for page in layout_result.pages:
-        for element in page.tables + page.lines + page.selection_marks:
-            semantic_chunks.append(element.content)
+        for line in page.lines:
+            semantic_chunks.append(line.content)
     logging.info("LOG: Chunks are created")
 
     ####### GENERATE EMBEDDINGS #############
