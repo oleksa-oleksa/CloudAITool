@@ -7,15 +7,26 @@ from azure.core.credentials import AzureKeyCredential
 from azure.cosmos import CosmosClient
 import openai
 from azure.search.documents import SearchClient
-from azure.search.documents.indexes.models import SearchIndex, Field, SimpleField, SearchFieldDataType
-from azure.search.documents.indexes import SearchIndexClient
 from azure.core.credentials import AzureKeyCredential
 
 app = func.FunctionApp()
 
 @app.blob_trigger(arg_name="myblob", path="requirements/{name}", connection="AzureWebJobsStorage")
 def BlobTriggerPDF(myblob: func.InputStream):
-    logging.info(f"Python blob trigger function processed blob\n"
+
+    logging.info(f"LOG: Triggered! Init")
+    
+    # Initialize global variables
+    doc_intelligence_api_key = os.getenv("DocIntelligenceApiKey")
+    doc_intelligence_endpoint = os.getenv("DocIntelligenceEndpoint")
+
+    # Initialize OpenAI
+    openai.api_key = os.getenv("OpenAIApiKey")
+    openai.base_url = os.getenv("OpenAIEndpoint")
+
+    
+    ###### PROCESS PDF ON TRIGGER #############
+    logging.info(f"LOG: BLOB Trigger: Processed blob\n"
                 f"Name: {myblob.name}\n"
                 f"Blob Size: {myblob.length} bytes")
 
@@ -26,32 +37,17 @@ def BlobTriggerPDF(myblob: func.InputStream):
 
     # Load PDF from blob
     pdf_bytes = myblob.read()
-    process_pdf_and_create_chunks(pdf_bytes, myblob.name)
 
-# Initialize global variables
-connection_string = os.getenv("AzureWebJobsStorage")
-cosmos_db_endpoint = os.getenv("CosmosDBEndpoint")
-cosmos_db_primary_key = os.getenv("CosmosDBPrimaryKey")
-database_id = os.getenv("DatabaseId")
-graph_id = os.getenv("GraphId")
-doc_intelligence_api_key = os.getenv("DocIntelligenceApiKey")
-doc_intelligence_endpoint = os.getenv("DocIntelligenceEndpoint")
-openai_api_key = os.getenv("OpenAIApiKey")
-openai_endpoint = os.getenv("OpenAIEndpoint")
+    ###### PROCESS PDF AND CREATE CHUNKS #######
+    doc_intelligence_api_key = os.getenv("DocIntelligenceApiKey")
+    doc_intelligence_endpoint = os.getenv("DocIntelligenceEndpoint")
 
-# Initialize OpenAI
-openai.api_key = openai_api_key
-openai.api_base = openai_endpoint
+    doc_analysis_client = DocumentAnalysisClient(
+        endpoint=doc_intelligence_endpoint,
+        credential=AzureKeyCredential(doc_intelligence_api_key)
+    )
+    logging.info("LOG: Document Intelligence init done")
 
-# Connect to Cosmos DB
-cosmos_client = CosmosClient(cosmos_db_endpoint, cosmos_db_primary_key)
-database = cosmos_client.get_database_client(database_id)
-container = database.get_container_client(graph_id)
-
-# Initialize Document Analysis client
-doc_analysis_client = DocumentAnalysisClient(endpoint=doc_intelligence_endpoint, credential=AzureKeyCredential(doc_intelligence_api_key))
-
-def process_pdf_and_create_chunks(pdf_bytes, blob_name):
     # Analyze document layout
     poller = doc_analysis_client.begin_analyze_document(
         model="prebuilt-layout", document=pdf_bytes)
@@ -62,12 +58,11 @@ def process_pdf_and_create_chunks(pdf_bytes, blob_name):
     for page in layout_result.pages:
         for element in page.tables + page.lines + page.selection_marks:
             semantic_chunks.append(element.content)
+    logging.info("LOG: Chunks are created")
 
-    generate_embeddings(semantic_chunks, blob_name)
-
-def generate_embeddings(chunks, blob_name):
+    ####### GENERATE EMBEDDINGS #############
     embeddings = []
-    for chunk in chunks:
+    for chunk in semantic_chunks:
         response = openai.Embedding.create(
             model="text-embedding-ada-002",
             input=chunk
@@ -77,10 +72,9 @@ def generate_embeddings(chunks, blob_name):
             "chunk": chunk,
             "embedding": embedding
         })
+    logging.info("LOG: Embeddings are created")
 
-    store_embeddings_in_cognitive_search(embeddings, blob_name)
-
-def store_embeddings_in_cognitive_search(embeddings, blob_name):
+    ##### STORE EMBEDDINGS IN AI SEARCH ##########
     search_service_endpoint = os.getenv("SearchServiceEndpoint")
     search_service_key = os.getenv("SearchServiceKey")
     search_index_name = "documentchunks"
@@ -91,15 +85,18 @@ def store_embeddings_in_cognitive_search(embeddings, blob_name):
         index_name=search_index_name, 
         credential=credential
     )
+    logging.info("LOG: AI Search init done")
+
 
     documents = [
         {
-            "id": f"{blob_name}_{i}",
+            "id": f"{myblob.name}_{i}",
             "chunk": embedding["chunk"],
             "embedding": embedding["embedding"],
-            "metadata_storage_path": f"https://{os.getenv('STORAGE_ACCOUNT_NAME')}.blob.core.windows.net/requirements/{blob_name}"
+            "metadata_storage_path": f"https://{os.getenv('STORAGE_ACCOUNT_NAME')}.blob.core.windows.net/requirements/{myblob.name}"
         } for i, embedding in enumerate(embeddings)
     ]
+    logging.info("LOG: Stored to AI Search")
 
     result = search_client.upload_documents(documents=documents)
-    logging.info(f"Upload result: {result}")
+    logging.info(f"LOG: Upload result: {result}")
