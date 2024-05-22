@@ -5,7 +5,9 @@ from azure.storage.blob import BlobServiceClient
 from azure.ai.formrecognizer import DocumentAnalysisClient
 from azure.core.credentials import AzureKeyCredential
 from azure.cosmos import CosmosClient
-import openai
+from openai import AzureOpenAI
+from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+
 from langchain_openai import OpenAIEmbeddings
 
 
@@ -55,21 +57,24 @@ def BlobTriggerPDF(myblob: func.InputStream):
 
     ####### GENERATE EMBEDDINGS WITH AZURE OPEN AI #############
     # Configure Azure OpenAI Service API
-    openai.api_type = "azure"
-    openai.api_version = os.getenv('OPENAI_API_VERSION')
-    openai.base_url = os.getenv('OpenAIEndpoint') 
-    openai.api_key = os.getenv("OPENAI_API_KEY")
 
+    token_provider = get_bearer_token_provider(
+        DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
+    )
+
+    client = AzureOpenAI(
+        api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
+        azure_endpoint=os.getenv("AZURE_OPENAI_API_VERSION"),
+        azure_ad_token_provider=token_provider
+    )
+    
     # Initialize embedding model
-    embed_open_ai = OpenAIEmbeddings(model= os.getenv("OPEN_AI_EMBEDDINGS_MODEL"),
-                                  api_version=openai.api_version,
-                                  base_url=openai.base_url,
-                                  api_key=openai.api_key,
-                                  chunk_size=1)
-
     embeddings = []
     for chunk in semantic_chunks:
-        response = embed_open_ai.embed_query(chunk)
+        response = client.embeddings.create(
+            model="text-embedding-ada-002",
+            input=chunk
+        )
 
         embeddings.append({
             "chunk": chunk,

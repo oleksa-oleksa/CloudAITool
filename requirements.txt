@@ -13,3 +13,4 @@ azure-core
 azure-cosmos
 azure-search-documents
 langchain-openai
+azure-identity
