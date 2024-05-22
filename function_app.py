@@ -7,10 +7,8 @@ from azure.core.credentials import AzureKeyCredential
 from azure.cosmos import CosmosClient
 from openai import AzureOpenAI
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
-
+import requests
 from langchain_openai import OpenAIEmbeddings
-
-
 from azure.search.documents import SearchClient
 from azure.core.credentials import AzureKeyCredential
 
@@ -67,19 +65,39 @@ def BlobTriggerPDF(myblob: func.InputStream):
         azure_endpoint=os.getenv("AZURE_OPENAI_API_VERSION"),
         azure_ad_token_provider=token_provider
     )
+    # Construct the embedding URL
+    openai_endpoint = os.getenv('AZURE_OPENAI_ENDPOINT')
+    deployment_id = os.getenv('OPEN_AI_EMBEDDINGS_MODEL')
+    api_version = os.getenv("AZURE_OPENAI_API_VERSION")
+    openai_api_key = os.getenv('AZURE_OPENAI_API_KEY')
+    embedding_url = f"{openai_endpoint}//openai/deployments/{deployment_id}/embeddings?api-version={api_version}"
+    #embedding_url = "https://openai/deployments//subscriptions/d41f65a5-e9ed-4ef4-b968-93a24decf7a3/resourceGroups/DCE___Germany___C_M___Digital_Customer-RG-TB900/providers/Microsoft.CognitiveServices/accounts/UserStoryCreator/deployments/text-embedding-ada-002/embeddings?api-version=2023-05-15"
     
+    headers = {
+        'Content-Type': 'application/json',
+        'api-key': openai_api_key
+    }
+
     # Initialize embedding model
     embeddings = []
     for chunk in semantic_chunks:
-        response = client.embeddings.create(
-            model="text-embedding-ada-002",
-            input=chunk
-        )
+        try:
+            data = {
+                "input": chunk
+            }
+            response = requests.post(embedding_url, headers=headers, json=data)
+            response.raise_for_status()
+            embedding = response.json()['data'][0]['embedding']  # Extract the embedding
 
-        embeddings.append({
-            "chunk": chunk,
-            "embedding": response
-        })
+            embeddings.append({
+                "chunk": chunk,
+                "embedding": embedding
+            })
+
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Failed to create embedding for chunk '{chunk}': {str(e)}")
+            logging.error(f"Response: {e.response.text if e.response else 'No response'}")
+
     logging.info("LOG: Embeddings are created")
 
     ##### STORE EMBEDDINGS IN AI SEARCH ##########
