@@ -5,7 +5,9 @@ from azure.storage.blob import BlobServiceClient
 from azure.ai.formrecognizer import DocumentAnalysisClient
 from azure.core.credentials import AzureKeyCredential
 from azure.cosmos import CosmosClient
-from openai import OpenAI, AzureOpenAI
+import openai
+from langchain_openai import OpenAIEmbeddings
+
 
 from azure.search.documents import SearchClient
 from azure.core.credentials import AzureKeyCredential
@@ -15,13 +17,10 @@ app = func.FunctionApp()
 @app.blob_trigger(arg_name="myblob", path="requirements/{name}", connection="AzureWebJobsStorage")
 def BlobTriggerPDF(myblob: func.InputStream):
 
-    logging.info(f"LOG: Triggered! Init")
+    logging.info(f"LOG: Function triggered, starting...")
     logging.info(myblob.name)
 
-    #client = OpenAI(base_url=os.getenv("OpenAIEndpoint"), api_key=os.environ['OpenAIApiKey'])
-
     ###### PROCESS PDF ON TRIGGER #############
-
     logging.info(f"Python blob trigger function processed blob\n"
                 f"Name: {myblob.name}\n"
                 f"Blob Size: {myblob.length} bytes")
@@ -36,7 +35,7 @@ def BlobTriggerPDF(myblob: func.InputStream):
     pdf_bytes = myblob.read()
     logging.info(f"LOG: Finish myblob.read()")
 
-    ###### ANALYSE PDF CONTENT #######
+    ###### ANALYSE PDF CONTENT WITH DOCUMENT INTELLIGENCE #######
     doc_intelligence_api_key = os.getenv("DocIntelligenceApiKey")
     doc_intelligence_endpoint = os.getenv("DocIntelligenceEndpoint")
     doc_analysis_client = DocumentAnalysisClient(endpoint=doc_intelligence_endpoint, credential=AzureKeyCredential(doc_intelligence_api_key))
@@ -54,23 +53,27 @@ def BlobTriggerPDF(myblob: func.InputStream):
             semantic_chunks.append(line.content)
     logging.info("LOG: Chunks are created")
 
-    ####### GENERATE EMBEDDINGS #############
-    client = AzureOpenAI(
-        api_key = os.getenv("OpenAIApiKey"),  
-        api_version = os.getenv("OPENAIApiVersion"),
-        azure_endpoint =os.getenv("OpenAIEndpoint") 
-        )
+    ####### GENERATE EMBEDDINGS WITH AZURE OPEN AI #############
+    # Configure Azure OpenAI Service API
+    openai.api_type = "azure"
+    openai.api_version = os.getenv('OPENAI_API_VERSION')
+    openai.base_url = os.getenv('OpenAIEndpoint') 
+    openai.api_key = os.getenv("OPENAI_API_KEY")
+
+    # Initialize embedding model
+    embed_open_ai = OpenAIEmbeddings(model= os.getenv("OPEN_AI_EMBEDDINGS_MODEL"),
+                                  api_version=openai.api_version,
+                                  base_url=openai.base_url,
+                                  api_key=openai.api_key,
+                                  chunk_size=1)
 
     embeddings = []
     for chunk in semantic_chunks:
-        response = client.embeddings.create(
-            input=chunk,
-            model="text-embedding-ada-002"
-        )
-        embedding = response['data'][0]['embedding']
+        response = embed_open_ai.embed_query(chunk)
+
         embeddings.append({
             "chunk": chunk,
-            "embedding": embedding
+            "embedding": response
         })
     logging.info("LOG: Embeddings are created")
 
