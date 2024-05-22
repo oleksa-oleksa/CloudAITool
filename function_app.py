@@ -5,7 +5,7 @@ from azure.storage.blob import BlobServiceClient
 from azure.ai.formrecognizer import DocumentAnalysisClient
 from azure.core.credentials import AzureKeyCredential
 from azure.cosmos import CosmosClient
-import openai
+from openai import OpenAI
 from azure.search.documents import SearchClient
 from azure.core.credentials import AzureKeyCredential
 
@@ -21,9 +21,8 @@ def BlobTriggerPDF(myblob: func.InputStream):
     doc_intelligence_api_key = os.getenv("DocIntelligenceApiKey")
     doc_intelligence_endpoint = os.getenv("DocIntelligenceEndpoint")
 
-    # Initialize OpenAI
-    openai.api_key = os.getenv("OpenAIApiKey")
-    openai.base_url = os.getenv("OpenAIEndpoint")
+    client = OpenAI(base_url=os.getenv("OpenAIEndpoint"), api_key=os.environ['OpenAIApiKey']
+)
 
     logging.info(f"LOG: Got environment variables")
 
@@ -51,7 +50,6 @@ def BlobTriggerPDF(myblob: func.InputStream):
     logging.info("LOG: Document Intelligence init done")
 
     # Analyze document layout
-    # Analyze document layout
     poller = doc_analysis_client.begin_analyze_document(model_id="prebuilt-layout", document=pdf_bytes)
     layout_result = poller.result()
 
@@ -65,7 +63,7 @@ def BlobTriggerPDF(myblob: func.InputStream):
     ####### GENERATE EMBEDDINGS #############
     embeddings = []
     for chunk in semantic_chunks:
-        response = openai.Embedding.create(
+        response = client.embeddings.create(
             model="text-embedding-ada-002",
             input=chunk
         )
