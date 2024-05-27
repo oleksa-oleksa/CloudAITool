@@ -45,6 +45,15 @@ def BlobTriggerPDF(myblob: func.InputStream):
     poller = doc_analysis_client.begin_analyze_document(model_id="prebuilt-layout", document=pdf_bytes)
     layout_result = poller.result()
 
+    ###### COPY ORIGINAL TEXT #######
+    # Extract original text from PDF
+    original_text = ""
+    for page in layout_result.pages:
+        for line in page.lines:
+            original_text += line.content + "\n"
+
+    logging.info("LOG: Full text extracted")
+
     ###### CREATE CHUNKS #######
     # Process layout result (semantic chunking)
     semantic_chunks = []
@@ -103,7 +112,7 @@ def BlobTriggerPDF(myblob: func.InputStream):
     ##### STORE EMBEDDINGS IN AI SEARCH ##########
     search_service_endpoint = os.getenv("SearchServiceEndpoint")
     search_service_key = os.getenv("SearchServiceKey")
-    search_index_name = "documentchunks"
+    search_index_name = "processed_requirement_document"
 
     credential = AzureKeyCredential(search_service_key)
     search_client = SearchClient(
@@ -126,6 +135,28 @@ def BlobTriggerPDF(myblob: func.InputStream):
     # for i, embedding in enumerate(embeddings[:5]):
     #     print(f"Embedding {i+1}: {embedding}")
 
+    ##### SAVING ORIGINAL PDF AND CNUNKS #########
+    documents = []
+    # Store the full text in one document
+    original_text_doc = {
+        "id": f"{os.path.splitext(os.path.basename(myblob.name))[0]}_fulltext",
+        "original_text": original_text,
+        "metadata_storage_path": f"https://{os.getenv('STORAGE_ACCOUNT_NAME')}.blob.core.windows.net/requirements/{myblob.name}"
+    }
+    documents.append(original_text_doc)
+
+    # Store chunks and embeddings
+    for i, embedding in enumerate(embeddings):
+        chunk_doc = {
+            "id": f"{os.path.splitext(os.path.basename(myblob.name))[0]}_{i}",
+            "chunk": embedding["chunk"],
+            "embedding": embedding["embedding"],        }
+        documents.append(chunk_doc)
+
+    logging.info("LOG: Documents prepared")
+
     result = search_client.upload_documents(documents=documents)
 
-    logging.info(f"LOG: Upload result: {result}")
+    #logging.info(f"LOG: Upload result: {result}")
+    logging.info(f"Trgger executed!")
+
