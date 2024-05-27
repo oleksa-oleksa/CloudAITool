@@ -116,13 +116,16 @@ def BlobTriggerPDF(myblob: func.InputStream):
 
     documents = [
         {
-            "id": f"{myblob.name}_{i}",
+            "id": f"{os.path.splitext(os.path.basename(myblob.name))[0]}_{i}",
             "chunk": embedding["chunk"],
-            "embedding": embedding["embedding"],
+            "embedding": embedding["embedding"] if isinstance(embedding["embedding"], list) else [embedding["embedding"]],
             "metadata_storage_path": f"https://{os.getenv('STORAGE_ACCOUNT_NAME')}.blob.core.windows.net/requirements/{myblob.name}"
         } for i, embedding in enumerate(embeddings)
     ]
-    logging.info("LOG: Stored to AI Search")
+    # DEBUG
+    # for i, embedding in enumerate(embeddings[:5]):
+    #     print(f"Embedding {i+1}: {embedding}")
 
     result = search_client.upload_documents(documents=documents)
+
     logging.info(f"LOG: Upload result: {result}")
