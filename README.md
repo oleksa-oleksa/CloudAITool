@@ -32,3 +32,11 @@ Orchestrate the workflow: process incoming PDFs, extract knowledge, augment with
 
 ## Trigger: Message added to the queue with the augmented prompt.
 -   Action: Use Azure OpenAI Service to generate output based on the augmented prompt and store the generated output back in Azure Blob Storage or another data store.
+
+## PROCESS
+Store: Original text, chunks, and embeddings in Azure Cognitive Search.
+Retrieve: Relevant chunks using semantic search based on user's prompt.
+Construct: Complete prompt with user input and context from relevant chunks.
+Generate: Output using Azure OpenAI.
+Store: Optionally store the generated output along with metadata.
+Display: Return the generated output to the user.
