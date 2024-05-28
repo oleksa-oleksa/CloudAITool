@@ -1,4 +1,4 @@
-# RAG Implementation
+# RAG Implementation for AZURE CLOUD
 
 ## Chunks
 
@@ -34,9 +34,16 @@ Orchestrate the workflow: process incoming PDFs, extract knowledge, augment with
 -   Action: Use Azure OpenAI Service to generate output based on the augmented prompt and store the generated output back in Azure Blob Storage or another data store.
 
 ## PROCESS
-Store: Original text, chunks, and embeddings in Azure Cognitive Search.
-Retrieve: Relevant chunks using semantic search based on user's prompt.
-Construct: Complete prompt with user input and context from relevant chunks.
-Generate: Output using Azure OpenAI.
-Store: Optionally store the generated output along with metadata.
-Display: Return the generated output to the user.
+- Store: Original text, chunks, and embeddings in Azure Cognitive Search.
+- Retrieve: Relevant chunks using semantic search based on user's prompt.
+- Construct: Complete prompt with user input and context from relevant chunks.
+- Generate: Output using Azure OpenAI.
+- Store: Optionally store the generated output along with metadata.
+- Display: Return the generated output to the user.
+
+
+## To create the final step of obtaining the saved original text, chunks, and embeddings, augmenting them with a prompt from CosmosDB, and creating an output:
+
+- Retrieve the Prompt from CosmosDB
+- Retrieve the Original Text, Chunks, and Embeddings from Azure Cognitive Search
+- Combine the Data and Generate an Output
